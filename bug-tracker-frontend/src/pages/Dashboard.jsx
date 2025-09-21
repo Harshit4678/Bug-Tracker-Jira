@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+// src/pages/Dashboard.jsx
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { fetchBugs, updateBug, createBug } from "../api";
 import BugForm from "./BugForm";
 import Modal from "../components/Modal";
@@ -34,6 +35,7 @@ function parseJwt(token) {
 export default function Dashboard() {
   const [bugs, setBugs] = useState([]);
   const [q, setQ] = useState("");
+  const [clientFiltered, setClientFiltered] = useState(null); // immediate preview
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,15 +46,20 @@ export default function Dashboard() {
   const nav = useNavigate();
   const { logout } = useAuthStore();
 
-  const load = async () => {
+  const searchTimer = useRef(null);
+
+  // improved load: accepts optional overrideQ to run search with given query
+  const load = async (overrideQ) => {
     try {
       setLoading(true);
       const qs = new URLSearchParams();
-      if (q) qs.set("q", q);
+      const useQ = typeof overrideQ === "string" ? overrideQ : q;
+      if (useQ) qs.set("q", useQ);
       if (status) qs.set("status", status);
       if (severity) qs.set("severity", severity);
       const data = await fetchBugs(qs.toString());
       setBugs(Array.isArray(data) ? data : []);
+      setClientFiltered(null);
       // build simple activities from bugs (client-side)
       const acts = (Array.isArray(data) ? data : [])
         .slice()
@@ -127,6 +134,23 @@ export default function Dashboard() {
     nav("/login"); // redirect
   };
 
+  // client-side filtering helper
+  const clientFilterLocal = (val) => {
+    if (!val) {
+      setClientFiltered(null);
+      return;
+    }
+    const vv = val.toLowerCase();
+    const filtered = bugs.filter((b) => {
+      const idMatch = b._id?.toLowerCase().includes(vv);
+      const titleMatch = b.title?.toLowerCase().includes(vv);
+      const descMatch = b.description?.toLowerCase().includes(vv);
+      const nameMatch = b.createdBy?.name?.toLowerCase().includes(vv);
+      return idMatch || titleMatch || descMatch || nameMatch;
+    });
+    setClientFiltered(filtered);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
       <Toaster position="top-right" />
@@ -150,12 +174,87 @@ export default function Dashboard() {
             <div className="w-full max-w-xl">
               <label className="relative block">
                 <span className="sr-only">Search bugs</span>
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search by title, id or description"
-                  className="w-full border rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                />
+
+                <div className="relative">
+                  <input
+                    value={q}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setQ(v);
+
+                      // client-side immediate filter
+                      clientFilterLocal(v);
+
+                      // debounce server search
+                      if (searchTimer.current)
+                        clearTimeout(searchTimer.current);
+                      searchTimer.current = setTimeout(() => {
+                        load(v);
+                        searchTimer.current = null;
+                      }, 300);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (searchTimer.current) {
+                          clearTimeout(searchTimer.current);
+                          searchTimer.current = null;
+                        }
+                        load(q);
+                      }
+                    }}
+                    placeholder="Search by id, title, description or reporter"
+                    className="w-full border rounded-lg px-12 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+
+                  {/* Search icon button (left inside input) */}
+                  <button
+                    onClick={() => {
+                      if (searchTimer.current) {
+                        clearTimeout(searchTimer.current);
+                        searchTimer.current = null;
+                      }
+                      load(q);
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-1"
+                    aria-label="search"
+                    title="Search"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-gray-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Clear button (right) */}
+                  {q && (
+                    <button
+                      onClick={() => {
+                        setQ("");
+                        setClientFiltered(null);
+                        if (searchTimer.current) {
+                          clearTimeout(searchTimer.current);
+                          searchTimer.current = null;
+                        }
+                        load("");
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      aria-label="clear"
+                      title="Clear"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               </label>
             </div>
           </div>
@@ -264,7 +363,7 @@ export default function Dashboard() {
                 <label className="text-xs text-gray-500">Quick actions</label>
                 <div className="mt-2 flex flex-col gap-2">
                   <button
-                    onClick={load}
+                    onClick={() => load()}
                     className="w-full px-3 py-2 bg-blue-600 text-white rounded-md"
                   >
                     Apply
@@ -274,6 +373,7 @@ export default function Dashboard() {
                       setQ("");
                       setStatus("");
                       setSeverity("");
+                      setClientFiltered(null);
                       load();
                     }}
                     className="w-full px-3 py-2 border rounded-md"
@@ -323,7 +423,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Bugs</h2>
               <div className="text-sm text-gray-500">
-                Showing {bugs.length} results
+                Showing {(clientFiltered ?? bugs).length} results
               </div>
             </div>
 
@@ -346,13 +446,13 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <AnimatePresence>
-                  {bugs.length === 0 ? (
+                  {(clientFiltered ?? bugs).length === 0 ? (
                     <div className="p-8 text-center text-gray-500">
                       No bugs found. Create one!
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {bugs.map((b) => (
+                      {(clientFiltered ?? bugs).map((b) => (
                         <Motion.div
                           key={b._id}
                           layout
