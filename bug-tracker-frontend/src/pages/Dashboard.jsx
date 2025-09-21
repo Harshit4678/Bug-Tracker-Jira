@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { fetchBugs, updateBug, createBug, removeToken } from "../api";
+import { fetchBugs, updateBug, createBug } from "../api";
 import BugForm from "./BugForm";
 import Modal from "../components/Modal";
 import BugCard from "../components/BugCard";
@@ -9,6 +9,7 @@ import ActivityFeed from "../components/ActivityFeed";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast";
+import useAuthStore from "../store/authStore";
 
 /* decode JWT */
 function parseJwt(token) {
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [activities, setActivities] = useState([]);
   const [open, setOpen] = useState(false); // mobile menu
   const nav = useNavigate();
+  const { logout } = useAuthStore();
 
   const load = async () => {
     try {
@@ -120,9 +122,9 @@ export default function Dashboard() {
     }
   };
 
-  const logout = () => {
-    removeToken();
-    nav("/login");
+  const doLogout = () => {
+    logout(); // clears token + user
+    nav("/login"); // redirect
   };
 
   return (
@@ -182,7 +184,7 @@ export default function Dashboard() {
             </div>
 
             <button
-              onClick={logout}
+              onClick={doLogout}
               className="px-3 py-2 border rounded-md text-sm hover:bg-gray-50 transition"
             >
               Logout

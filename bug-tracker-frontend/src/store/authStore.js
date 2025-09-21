@@ -163,7 +163,7 @@ const useAuthStore = create((set) => ({
   // LOGOUT
   logout: () => {
     removeToken();
-    set({ user: null, token: null, info: null, error: null });
+    set({ user: null, token: null, info: "Logout Successfully", error: null });
   },
 }));
 
