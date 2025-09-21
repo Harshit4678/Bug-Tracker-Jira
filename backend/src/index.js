@@ -16,6 +16,9 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/bugs", bugRoutes);
 app.use("/api/activities", activityRoutes);
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on ${PORT}`));
